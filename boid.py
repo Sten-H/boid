@@ -52,9 +52,14 @@ class Boid():
         return v
 
     def goal(self, goal_pos):
-        goal = np.array([goal_pos[0], goal_pos[1]])
+        goal = np.array([goal_pos[0][0], goal_pos[0][1]])
+        mult = 0
+        if goal_pos[1] == True:
+            mult = 1
+        else:
+            mult = -1
         if np.linalg.norm(goal - self.pos) < self.sight_range:
-            return (goal - self.pos)
+            return mult*((goal - self.pos) / 4)
         return np.array([0, 0])
 
     def update_velocity(self, flock, goal, dim):
