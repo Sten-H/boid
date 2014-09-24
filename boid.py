@@ -7,7 +7,7 @@ boid_colours = [(52, 117, 214), (215, 68, 52), (52, 216, 69), (200, 217, 52)]
 
 class Boid():
     max_velocity = 400
-    sight_range = 300
+    sight_range = 150
     proximity_value = 80
 
     def __init__(self, xpos, ypos):
