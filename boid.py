@@ -38,10 +38,9 @@ class Boid():
         dist = self.length(self.pos, b.pos)
         if dist < self.proximity_value:
             v[2] -= (b.pos - self.pos)
-        if dist < self.sight_range:
-            v[0] += b.pos
-            v[1] += b.velocity
-            v[3] += 1
+        v[0] += b.pos
+        v[1] += b.velocity
+        v[3] += 1
 
     def examine_flock(self, flock):
         #Returns the average perceived center, perceived direction and separation of Boids within sight_range
@@ -72,12 +71,13 @@ class Boid():
         return v * bound_multiplier
 
     def goal(self, goal_packed):
+        goal_range = 250
         v_goal = Vector2(0, 0)
         if goal_packed[0]:
             goal_pos = goal_packed[0]
             attract = goal_packed[1]
             goal = Vector2(goal_pos[0], goal_pos[1])
-            if self.length(goal, self.pos) < self.sight_range:
+            if self.length(goal, self.pos) < goal_range:
                 attract_multiplier = 1 if attract else -1
                 v_goal += attract_multiplier * ((goal - self.pos) / 4)
         return v_goal
@@ -88,15 +88,19 @@ class Boid():
     def update_velocity(self, flock, goal, dim):
         p_center, p_direction, v_separation = self.examine_flock(flock)
         new_dir = Vector2(0, 0)
+        #Multipliers, should be adjustable during runtime (probably)
+        separation_multiplier = 1.5
+        cohesion_multiplier = 1
+        alignment_multiplier = 1
+        goal_multiplier = .5
+        bounding_multiplier = 1
         #Rules
-        v1 = (p_center - self.pos) / 100        # Boid steers toward perceived center of flock
-        v2 = v_separation                       # Boid tries to separate from nearby flock mates
-        v3 = (p_direction - self.velocity) / 8  # Boid aligns to perceived flock direction
-        v4 = self.bound_pos(dim)                # Boid steers away from edges of environment(screen)
-        new_dir += v1 + v2 + v3 + v4
-        if goal[0]:
-            v5 = self.goal(goal)                #Boid steers toward/away from goal(mouse)
-            new_dir += v5
+        v1 = ((p_center - self.pos) / 100) * cohesion_multiplier         # Boid steers toward perceived center of flock
+        v2 = v_separation * separation_multiplier                        # Boid tries to separate from nearby flock mates
+        v3 = ((p_direction - self.velocity) / 8) * alignment_multiplier  # Boid aligns to perceived flock direction
+        v4 = self.bound_pos(dim) * bounding_multiplier                   # Boid steers away from edges of environment(screen)
+        v5 = self.goal(goal) * goal_multiplier                           # Boid steers toward/away from goal(mouse)
+        new_dir += v1 + v2 + v3 + v4 + v5
         self.velocity += new_dir
 
         linear_velocity = self.velocity.magnitude()
@@ -137,38 +141,46 @@ class FlockController():
             local_swarm = self.swarm_grid.get_neighbourhood(b)
             b.update(local_swarm, goal, (self.width, self.height), dt)
 
+    def update_directions(self, goal):
+        for b in self.flock:
+            local_swarm = self.swarm_grid.get_neighbourhood(b)
+            b.update_velocity(local_swarm, goal, (self.width, self.height))
+
+    def update_positions(self, dt):
+        for b in self.flock:
+            b.update_position(dt)
+        self.swarm_grid.update_grid()
+
     def update(self, goal, dt):
         self.move_flock(goal, dt)
         self.swarm_grid.update_grid()
 
 
 class SwarmGrid():
-    cell_size = 100
+    cell_size = 50
     boids = []
     def __init__(self, width, height):
         x_cells = width // self.cell_size
         y_cells = height // self.cell_size
-        self.x_max_width = int((x_cells - 1) * 1.2)
-        self.x_min_width = int(0 -(self.x_max_width * 0.2))
-        self.y_max_width = int((y_cells - 1) * 1.2)
-        self.y_min_width = int(0 -(self.y_max_width * 0.2))
+        self.x_max = int((x_cells - 1) * 1.2)
+        self.x_min = int((self.x_max * -0.2))
+        self.y_max = int((y_cells - 1) * 1.2)
+        self.y_min = int((self.y_max * -0.2))
         self.cell_map = {}
-        self.search_range = self.cell_size
-        for x in range(self.x_min_width, self.x_max_width+1):
-            for y in range(self.y_min_width, self.y_max_width+1):
-                self.cell_map[(x,y)] = []
+        for x in range(self.x_min, self.x_max+1):
+            for y in range(self.y_min, self.y_max+1):
+                self.cell_map[(x, y)] = []
 
     def populate(self, flock):
         [self.add(b) for b in flock]
 
     def cell_id(self,x_pos, y_pos):
-        x, y = x_pos//self.search_range, y_pos//self.search_range
+        x, y = x_pos//self.cell_size, y_pos//self.cell_size
         #Store negative values in 0 cell
-        x = max(self.x_min_width, x)
-        x = min(x, self.x_max_width)
-        y = max(self.y_min_width, y)
-        y = min(y, self.y_max_width)
-        print x,y
+        x = max(self.x_min, x)
+        x = min(x, self.x_max)
+        y = max(self.y_min, y)
+        y = min(y, self.y_max)
         return x,y
 
     def add(self, b):
@@ -179,17 +191,15 @@ class SwarmGrid():
         self.cell_map[self.cell_id(b.pos.x, b.pos.y)].append(b)
 
     def get_neighbourhood(self, b):
-        neighbourhood = []
+        search_range = b.sight_range
         x, y = self.cell_id(b.pos.x, b.pos.y)
+        neighbourhood = []
         for i in range(-1,2):
             for j in range(-1, 2):
                 new_x = x + i
                 new_y = y + j
-                new_x = max(new_x, 0)
-                new_x = min(new_x, self.x_max_width)
-                new_y = max(new_y, 0)
-                new_y = min(new_y, self.y_max_width)
-                neighbourhood += self.cell_map[(new_x, new_y)]
+                if (new_x, new_y) in self.cell_map:
+                    neighbourhood += self.cell_map[(new_x, new_y)]
         return neighbourhood
 
     def update_grid(self):

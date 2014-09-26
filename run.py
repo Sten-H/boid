@@ -29,7 +29,6 @@ def main():
     flock_controller = FlockController(WIDTH, HEIGHT, BOID_AMOUNT)
 
     while run:
-        clock.tick(50)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
@@ -40,16 +39,20 @@ def main():
                     goal_attractive = not goal_attractive
                 elif pressed[2]:
                     mouse_active = not mouse_active
-
         pygame.event.pump()
         if mouse_active:
             mouse_pos = pygame.mouse.get_pos()
         else:
             mouse_pos = None
+        #flock_controller.update_directions((mouse_pos, goal_attractive))
+        clock.tick(50)
         flock_controller.update((mouse_pos, goal_attractive), clock.get_time() / 1000.0)
+        #flock_controller.update_positions(clock.get_time()/1000.0)
         draw(flock_controller.flock)
         pygame.display.flip()
         frames_rendered += 1
+        if pygame.time.get_ticks() > 15000:
+            run = False
     #End Main Loop
     print "FPS: " +str(frames_rendered/(pygame.time.get_ticks()/1000.0))
 
